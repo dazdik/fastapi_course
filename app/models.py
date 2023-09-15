@@ -1,6 +1,13 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, PositiveInt
 
 
-class User(BaseModel):
+class Feedback(BaseModel):
     name: str
-    age: int
+    message: str
+
+
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+    age: PositiveInt = None
+    is_subscribed: bool = None
