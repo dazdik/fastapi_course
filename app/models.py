@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, PositiveInt
+from pydantic import BaseModel, EmailStr, constr
 
 
 class Feedback(BaseModel):
@@ -9,5 +9,7 @@ class Feedback(BaseModel):
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
-    age: PositiveInt = None
-    is_subscribed: bool = None
+    password: str = constr(
+        min_length=8,
+        max_length=20
+    )
