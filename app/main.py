@@ -1,5 +1,8 @@
+import uuid
+
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, Response, HTTPException, Cookie
+
 from fastapi.responses import FileResponse
 
 
@@ -15,20 +18,8 @@ async def root():
     return FileResponse('index.html')
 
 
-msg = []
-
-
-@app.post('/feedback')
-async def send_message(data: Feedback):
-    msg.append({'name': data.name, 'message': data.message})
-    return {"message": f"Feedback received. Thank you, {data.name}!"}
-
-
-@app.get('/comments')
-async def get_comments():
-    return msg
-
 users: list[UserCreate] = []
+sessions: dict = {}
 
 
 @app.post('/create_user')
@@ -42,18 +33,24 @@ async def get_users():
     return users
 
 
-@app.get('/product/{product_id}')
-async def get_product_by_id(product_id: int):
-    product_by_id = [product for product in sample_products if product['product_id'] == product_id]
-    return product_by_id[0] if product_by_id else 'Такого айди нет'
+@app.post('/login')
+async def login(user: UserCreate, response: Response):
+    for person in users:
+        if person.email != user.email and person.password != user.password:
+            raise HTTPException(status_code=400, detail='Введены некорректные данные, попробуйте снова')
+
+        session_token = str(uuid.uuid1())
+        sessions[session_token] = user
+        response.set_cookie('session_token', session_token, httponly=True)
+        return {'message': 'Куки установлены'}
 
 
-@app.get('/products/search/')
-async def search_products(keyword: str, category:  str | None = None, limit: int = Query(10, ge=1)):
-    list_of_key = [product for product in sample_products if keyword.lower() in product['name'].lower()]
-    if category:
-        list_of_key = [product for product in list_of_key if product['category'].lower() == category.lower()]
-    return list_of_key[:limit]
+@app.get('/user')
+async def get_current_user(session_token = Cookie()):
+    user = sessions.get(session_token)
+    if not user:
+        raise HTTPException(status_code=401, detail='Вы не авторизованы')
+    return user.dict()
 
 
 if __name__ == "__main__":
