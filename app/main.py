@@ -1,9 +1,10 @@
 import uvicorn
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel
+from fastapi import FastAPI, Query
+from fastapi.responses import FileResponse
 
-from app.models import User
+
+from app.models import Feedback, UserCreate
+from app.data import sample_products
 
 
 app = FastAPI()
@@ -13,22 +14,46 @@ app = FastAPI()
 async def root():
     return FileResponse('index.html')
 
-fake_users = {
-    1: {'username': 'junior_dev', 'email': 'jundev@bk.ru'},
-    2: {'username': 'middle_dev', 'email': 'middledev@bk.ru'},
-}
+
+msg = []
 
 
-@app.get('/users/{user_id}')
-def get_users(user_id: int):
-    if user_id in fake_users:
-        return fake_users[user_id]
-    return {'error': 'user not found'}
+@app.post('/feedback')
+async def send_message(data: Feedback):
+    msg.append({'name': data.name, 'message': data.message})
+    return {"message": f"Feedback received. Thank you, {data.name}!"}
 
 
-@app.get('/users/')
-def get_limit_user(limit: int = 10):
-    return dict(list(fake_users.items())[:limit])
+@app.get('/comments')
+async def get_comments():
+    return msg
+
+users: list[UserCreate] = []
+
+
+@app.post('/create_user')
+async def user_create(data: UserCreate):
+    users.append(data)
+    return data
+
+
+@app.get('/show_users')
+async def get_users():
+    return users
+
+
+@app.get('/product/{product_id}')
+async def get_product_by_id(product_id: int):
+    product_by_id = [product for product in sample_products if product['product_id'] == product_id]
+    return product_by_id[0] if product_by_id else 'Такого айди нет'
+
+
+@app.get('/products/search/')
+async def search_products(keyword: str, category:  str | None = None, limit: int = Query(10, ge=1)):
+    list_of_key = [product for product in sample_products if keyword.lower() in product['name'].lower()]
+    if category:
+        list_of_key = [product for product in list_of_key if product['category'].lower() == category.lower()]
+    return list_of_key[:limit]
 
 
 if __name__ == "__main__":
