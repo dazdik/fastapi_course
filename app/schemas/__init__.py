@@ -1,4 +1,5 @@
-__all__ = ("UserSchema", "SchemaFeedBack")
+__all__ = ("UserSchema", "SchemaFeedBack", "ProductSchema", "AunteficatedShema")
 
+from .productschema import ProductSchema
 from .schemafeedback import SchemaFeedBack
-from .userschema import UserSchema
+from .userschema import AunteficatedShema, UserSchema
