@@ -4,14 +4,23 @@ from contextlib import asynccontextmanager
 from typing import Annotated
 
 import uvicorn
-from fastapi import (Cookie, FastAPI, Header, HTTPException, Query, Request,
-                     Response, status)
+from fastapi import (
+    Cookie,
+    FastAPI,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+    Depends,
+)
 from sqlalchemy import select
 
 from app.models import Base, Feedback, Product, User, UserAuth
 from app.models.config import engine, session
-from app.schemas import (AunteficatedShema, ProductSchema, SchemaFeedBack,
-                         UserSchema)
+from app.schemas import AunteficatedShema, ProductSchema, SchemaFeedBack, UserSchema
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 
 
 async def create_tables():
@@ -28,6 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+security = HTTPBasic()
 
 
 @app.get("/items/")
@@ -48,13 +58,12 @@ async def create_feedback(feedback: SchemaFeedBack) -> dict:
     "/create_user",
     status_code=status.HTTP_201_CREATED,
 )
-async def create_user(people: UserSchema) -> UserSchema:
+async def create_user(user: AunteficatedShema) -> AunteficatedShema:
     async with session() as s:
-        user = User(
-            name=people.name,
-            email=people.email,
-            age=people.age,
-            is_subscribed=people.is_subscribed,
+        user = UserAuth(
+            username=user.username,
+            password=user.password,
+            session_token=user.session_token,
         )
         s.add(user)
         await s.commit()
@@ -107,8 +116,7 @@ async def search_exactly_product(
         return products
 
 
-@app.post("/login")
-async def root(response: Response, user: AunteficatedShema):
+async def get_user_from_db(user: AunteficatedShema) -> AunteficatedShema:
     async with session() as s:
         res = select(UserAuth).filter(
             user.username == UserAuth.username, user.password == UserAuth.password
@@ -117,13 +125,22 @@ async def root(response: Response, user: AunteficatedShema):
         result_user = result.scalar_one_or_none()
         if result_user is None:
             raise HTTPException(status_code=401, detail="message: Unauthorized")
-        session_token = secrets.token_urlsafe()
-        response.set_cookie(
-            key="session_token", value=session_token, httponly=True, secure=True
+
+    return user
+
+
+async def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
+    user = await get_user_from_db(credentials)
+    if user is None or user.password != credentials.password:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
         )
-        result_user.session_token = session_token
-        await s.commit()
-    return {"message": "куки установлены"}
+    return user
+
+
+@app.get("/protected_resource/")
+def get_protected_resource(user: AunteficatedShema = Depends(authenticate_user)):
+    return {"message": "You have access to the protected resource!", "user_info": user}
 
 
 @app.get("/user")
