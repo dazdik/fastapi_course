@@ -1,39 +1,22 @@
 import re
-import bcrypt
 from contextlib import asynccontextmanager
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from typing import Annotated
 
+import bcrypt
 import jwt
 import uvicorn
-from fastapi import (
-    Cookie,
-    Depends,
-    FastAPI,
-    Header,
-    HTTPException,
-    Query,
-    Request,
-    status,
-)
+from fastapi import (Cookie, Depends, FastAPI, Header, HTTPException, Query,
+                     Request, status)
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-
-from sqlalchemy import select
-
-from app.models import Base, Feedback, Product, UserAuth, ToDo
-from app.db_config import engine, session
-from app.schemas import (
-    AunteficatedShema,
-    ProductSchema,
-    SchemaFeedBack,
-    User2Schema,
-    UserInDB,
-    Token,
-    TokenData,
-    ToDoSchema,
-)
 from jwt import PyJWTError
 from passlib.context import CryptContext
+from sqlalchemy import select
+
+from app.db_config import engine, session
+from app.models import Base, Feedback, Product, ToDo, UserAuth
+from app.schemas import (AunteficatedShema, ProductSchema, SchemaFeedBack,
+                         ToDoSchema, Token, TokenData, User2Schema, UserInDB)
 
 
 async def create_tables():
