@@ -2,6 +2,7 @@ from pathlib import Path
 
 import aiosqlite
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 from .db_settings import settings
 
 # BASE_DIR = Path(__file__).resolve().parent.parent
