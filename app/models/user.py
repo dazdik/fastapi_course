@@ -6,7 +6,7 @@ from .base import Base
 
 class User(Base):
     name: Mapped[str] = mapped_column(String(30))
-    email: Mapped[str] = mapped_column(String(50))
+    email: Mapped[str] = mapped_column(String(50), unique=True)
     age: Mapped[int]
     is_subscribed: Mapped[bool | None] = mapped_column(default=None)
 
