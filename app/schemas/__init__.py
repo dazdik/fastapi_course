@@ -12,12 +12,6 @@ __all__ = (
 
 from .productschema import ProductSchema
 from .schemafeedback import SchemaFeedBack
-from .userschema import (
-    AunteficatedShema,
-    UserSchema,
-    User2Schema,
-    UserInDB,
-    Token,
-    TokenData,
-)
 from .todoschema import ToDoSchema
+from .userschema import (AunteficatedShema, Token, TokenData, User2Schema,
+                         UserInDB, UserSchema)
