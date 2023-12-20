@@ -20,8 +20,8 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from sqlalchemy import select
 
-from app.models import Base, Feedback, Product, UserAuth
-from app.models.config import engine, session
+from app.models import Base, Feedback, Product, UserAuth, ToDo
+from app.db_config import engine, session
 from app.schemas import (
     AunteficatedShema,
     ProductSchema,
@@ -30,6 +30,7 @@ from app.schemas import (
     UserInDB,
     Token,
     TokenData,
+    ToDoSchema,
 )
 from jwt import PyJWTError
 from passlib.context import CryptContext
@@ -289,6 +290,31 @@ async def get_headers(request: Request):
             detail="неправильный формат Accept-Language",
         )
     return {"User-Agent": user_agent, "Accept-Language": accept_language}
+
+
+@app.post("/todos", status_code=status.HTTP_201_CREATED)
+async def create_todo(todo_in: ToDoSchema) -> ToDoSchema:
+    async with session() as s:
+        todo = ToDo(
+            title=todo_in.title,
+            description=todo_in.description,
+            completed=todo_in.completed,
+        )
+        s.add(todo)
+        await s.commit()
+        return todo
+
+
+@app.get("/todos/{todo_id}")
+async def get_todo_id(todo_id: int) -> ToDoSchema:
+    async with session() as s:
+        stmt = await s.execute(select(ToDo).where(ToDo.id == todo_id))
+        todo_by_id = stmt.scalar_one_or_none()
+        if todo_by_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Id not found"
+            )
+        return todo_by_id
 
 
 if __name__ == "__main__":
