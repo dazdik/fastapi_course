@@ -5,7 +5,7 @@ import uvicorn
 from fastapi import FastAPI, Header, status
 
 from app.models import Base, Feedback, User
-from app.models.config import engine, session
+from app.db_config import engine, session
 from app.schemas import SchemaFeedBack, UserSchema
 
 
