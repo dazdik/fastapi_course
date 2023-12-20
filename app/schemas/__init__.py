@@ -7,6 +7,7 @@ __all__ = (
     "UserInDB",
     "Token",
     "TokenData",
+    "ToDoSchema",
 )
 
 from .productschema import ProductSchema
@@ -19,3 +20,4 @@ from .userschema import (
     Token,
     TokenData,
 )
+from .todoschema import ToDoSchema
