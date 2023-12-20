@@ -1,26 +1,38 @@
 import re
-import secrets
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
 from typing import Annotated
 
+import bcrypt
+import jwt
 import uvicorn
 from fastapi import (
     Cookie,
+    Depends,
     FastAPI,
     Header,
     HTTPException,
     Query,
     Request,
-    Response,
     status,
-    Depends,
 )
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jwt import PyJWTError
+from passlib.context import CryptContext
 from sqlalchemy import select
 
-from app.models import Base, Feedback, Product, User, UserAuth
-from app.models.config import engine, session
-from app.schemas import AunteficatedShema, ProductSchema, SchemaFeedBack, UserSchema
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from app.db_config import engine, session
+from app.models import Base, Feedback, Product, ToDo, UserAuth
+from app.schemas import (
+    AunteficatedShema,
+    ProductSchema,
+    SchemaFeedBack,
+    ToDoSchema,
+    Token,
+    TokenData,
+    User2Schema,
+    UserInDB,
+)
 
 
 async def create_tables():
@@ -37,7 +49,31 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-security = HTTPBasic()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
+
+SECRET_KEY = "be1310020364b6fef23410fc4eb85100d00083306899ab8abf3bed0243deb1a9"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+fake_users_db = {
+    "johndoe": {
+        "username": "johndoe",
+        "full_name": "John Doe",
+        "email": "johndoe@example.com",
+        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+        "disabled": False,
+    },
+    "pythondev": {
+        "username": "python",
+        "full_name": "Python Developer",
+        "email": "pythondev@example.com",
+        "hashed_password": "$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
+        "disabled": False,
+    },
+}
 
 
 @app.get("/items/")
@@ -126,21 +162,94 @@ async def get_user_from_db(user: AunteficatedShema) -> AunteficatedShema:
         if result_user is None:
             raise HTTPException(status_code=401, detail="message: Unauthorized")
 
+        return user
+
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+
+def get_user(db, username: str):
+    if username in db:
+        user_dict = db[username]
+        return UserInDB(**user_dict)
+
+
+def authenticate_user(fake_db, username: str, password: str):
+    user = get_user(fake_db, username)
+    if not user:
+        return False
+    if not verify_password(password, user.hashed_password):
+        return False
     return user
 
 
-async def authenticate_user(credentials: HTTPBasicCredentials = Depends(security)):
-    user = await get_user_from_db(credentials)
-    if user is None or user.password != credentials.password:
+def create_access_token(data: dict, expires_delta: timedelta | None = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except PyJWTError:
+        raise credentials_exception
+    user = get_user(fake_users_db, username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def get_current_active_user(
+    current_user: Annotated[User2Schema, Depends(get_current_user)]
+):
+    if current_user.disabled:
+        raise HTTPException(status_code=400, detail="Inactive user")
+    return current_user
+
+
+@app.post("/login", response_model=Token)
+async def login_for_access_token(
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
+):
+    user = authenticate_user(fake_users_db, form_data.username, form_data.password)
+    if not user:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
         )
-    return user
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
-@app.get("/protected_resource/")
-def get_protected_resource(user: AunteficatedShema = Depends(authenticate_user)):
-    return {"message": "You have access to the protected resource!", "user_info": user}
+@app.get("/protected_resource", response_model=User2Schema)
+async def read_users_me(
+    current_user: Annotated[User2Schema, Depends(get_current_active_user)]
+):
+    return current_user
 
 
 @app.get("/user")
@@ -180,6 +289,31 @@ async def get_headers(request: Request):
             detail="неправильный формат Accept-Language",
         )
     return {"User-Agent": user_agent, "Accept-Language": accept_language}
+
+
+@app.post("/todos", status_code=status.HTTP_201_CREATED)
+async def create_todo(todo_in: ToDoSchema) -> ToDoSchema:
+    async with session() as s:
+        todo = ToDo(
+            title=todo_in.title,
+            description=todo_in.description,
+            completed=todo_in.completed,
+        )
+        s.add(todo)
+        await s.commit()
+        return todo
+
+
+@app.get("/todos/{todo_id}")
+async def get_todo_id(todo_id: int) -> ToDoSchema:
+    async with session() as s:
+        stmt = await s.execute(select(ToDo).where(ToDo.id == todo_id))
+        todo_by_id = stmt.scalar_one_or_none()
+        if todo_by_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Id not found"
+            )
+        return todo_by_id
 
 
 if __name__ == "__main__":
