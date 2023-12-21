@@ -3,36 +3,30 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Annotated
 
-import bcrypt
 import jwt
 import uvicorn
-from fastapi import (Cookie, Depends, FastAPI, Header, HTTPException, Query,
-                     Request, status)
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt import PyJWTError
 from passlib.context import CryptContext
-from sqlalchemy import select
+from products.views import router as product_router
+from todos.views import router as todo_router
 
-from app.db_config import engine, session
-from app.models import Base, Feedback, Product, ToDo, UserAuth
-from app.schemas import (AunteficatedShema, ProductSchema, SchemaFeedBack,
-                         ToDoSchema, Token, TokenData, User2Schema, UserInDB)
-
-
-async def create_tables():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+from app.db_config import sessionmanager
+from app.schemas import Token, TokenData, User2Schema, UserInDB
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_tables()
     yield
-    # Clean up the ML models and release the resources
-    pass
+    if sessionmanager.engine is not None:
+        # Close the DB connection
+        await sessionmanager.close()
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(product_router)
+app.include_router(todo_router)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login")
 
 SECRET_KEY = "be1310020364b6fef23410fc4eb85100d00083306899ab8abf3bed0243deb1a9"
@@ -58,95 +52,6 @@ fake_users_db = {
         "disabled": False,
     },
 }
-
-
-@app.get("/items/")
-async def read_items(user_agent: Annotated[str | None, Header()] = None):
-    return {"User-Agent": user_agent}
-
-
-@app.post("/feedback/", status_code=status.HTTP_201_CREATED)
-async def create_feedback(feedback: SchemaFeedBack) -> dict:
-    async with session() as s:
-        feed = Feedback(name=feedback.name, message=feedback.message)
-        s.add(feed)
-        await s.commit()
-    return {"message": f"Feedback received. Thank you, {feed.name}!"}
-
-
-@app.post(
-    "/create_user",
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_user(user: AunteficatedShema) -> AunteficatedShema:
-    async with session() as s:
-        user = UserAuth(
-            username=user.username,
-            password=user.password,
-            session_token=user.session_token,
-        )
-        s.add(user)
-        await s.commit()
-    return user
-
-
-@app.post(
-    "/create_products/",
-    status_code=status.HTTP_201_CREATED,
-)
-async def create_product(product: ProductSchema) -> ProductSchema:
-    async with session() as s:
-        product = Product(
-            product_id=product.product_id,
-            name=product.name,
-            category=product.category,
-            price=product.price,
-        )
-        s.add(product)
-        await s.commit()
-        return product
-
-
-@app.get("/product/{product_id}")
-async def get_product_by_id(product_id: int) -> ProductSchema:
-    async with session() as s:
-        stmt = await s.execute(select(Product).filter(Product.product_id == product_id))
-        product = stmt.scalar_one_or_none()
-        if product is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="id not found"
-            )
-        return product
-
-
-@app.get("/products/search")
-async def search_exactly_product(
-    keyword: str,
-    category: str | None = None,
-    limit: int = Query(10, le=10),
-) -> list[ProductSchema]:
-    async with session() as s:
-        stmt = select(Product).where(Product.name.ilike(f"%{keyword}%"))
-
-        if category:
-            stmt = stmt.where(Product.category.ilike(f"%{category}%"))
-        stmt = stmt.limit(limit)
-        result = await s.execute(stmt)
-        products = result.scalars().all()
-        return products
-
-
-async def get_user_from_db(user: AunteficatedShema) -> AunteficatedShema:
-    async with session() as s:
-        res = select(UserAuth).filter(
-            user.username == UserAuth.username, user.password == UserAuth.password
-        )
-        result = await s.execute(res)
-        result_user = result.scalar_one_or_none()
-        if result_user is None:
-            raise HTTPException(status_code=401, detail="message: Unauthorized")
-
-        return user
 
 
 def verify_password(plain_password, hashed_password):
@@ -236,22 +141,6 @@ async def read_users_me(
     return current_user
 
 
-@app.get("/user")
-async def user_true(session_token: str = Cookie(None)):
-    if session_token is None:
-        return {"message": "Токен сессии отсутствует"}
-
-    async with session() as s:
-        query = select(UserAuth).where(UserAuth.session_token == session_token)
-        result = await s.execute(query)
-        user = result.scalar_one_or_none()
-
-        if user:
-            return {"user_info": f"{user.username}"}
-        else:
-            return {"message": "Пользователь не найден или токен недействителен"}
-
-
 ACCEPT_LANGUAGE_PATTERN = (
     r"(?i:(?:\*|[a-z\-]{2,5})(?:;q=\d\.\d)?,)+(?:\*|[a-z\-]{2,5})(?:;q=\d\.\d)?"
 )
@@ -273,31 +162,6 @@ async def get_headers(request: Request):
             detail="неправильный формат Accept-Language",
         )
     return {"User-Agent": user_agent, "Accept-Language": accept_language}
-
-
-@app.post("/todos", status_code=status.HTTP_201_CREATED)
-async def create_todo(todo_in: ToDoSchema) -> ToDoSchema:
-    async with session() as s:
-        todo = ToDo(
-            title=todo_in.title,
-            description=todo_in.description,
-            completed=todo_in.completed,
-        )
-        s.add(todo)
-        await s.commit()
-        return todo
-
-
-@app.get("/todos/{todo_id}")
-async def get_todo_id(todo_id: int) -> ToDoSchema:
-    async with session() as s:
-        stmt = await s.execute(select(ToDo).where(ToDo.id == todo_id))
-        todo_by_id = stmt.scalar_one_or_none()
-        if todo_by_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Id not found"
-            )
-        return todo_by_id
 
 
 if __name__ == "__main__":
