@@ -1,8 +1,9 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, PositiveInt, Field
 
 
 class ProductSchema(BaseModel):
-    product_id: int
-    name: str
-    category: str
+    name: str = Field(max_length=40)
+    category: str = Field(max_length=40)
+    description: str
     price: float
+    count: PositiveInt
