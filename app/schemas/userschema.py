@@ -1,17 +1,20 @@
-from pydantic import BaseModel, EmailStr, conint
+from pydantic import BaseModel, EmailStr, Field, ConfigDict
 
 
-class UserSchema(BaseModel):
-    name: str
+class UserBaseSchema(BaseModel):
     email: EmailStr
-    age: conint(gt=0)
-    is_subscribed: bool | None = None
-
-
-class AunteficatedShema(BaseModel):
     username: str
-    password: str
-    session_token: str | None = None
+
+
+class CreateUserSchema(UserBaseSchema):
+    hashed_password: str = Field(alias="password")
+
+
+class UserSchema(UserBaseSchema):
+    id: int
+    is_active: bool = Field(default=False)
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 class Token(BaseModel):
@@ -19,16 +22,5 @@ class Token(BaseModel):
     token_type: str
 
 
-class TokenData(BaseModel):
-    username: str | None = None
-
-
-class User2Schema(BaseModel):
-    username: str
-    email: str | None = None
-    full_name: str | None = None
-    disabled: bool | None = None
-
-
-class UserInDB(User2Schema):
-    hashed_password: str
+class DataToken(BaseModel):
+    id: str | None = None
