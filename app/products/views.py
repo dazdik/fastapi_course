@@ -28,8 +28,8 @@ async def create_product(
     product: ProductSchema, session: AsyncSession = Depends(get_db_session)
 ) -> ProductSchema:
     product = Product(
-        product_id=product.product_id,
         name=product.name,
+        description=product.description,
         category=product.category,
         price=product.price,
     )
