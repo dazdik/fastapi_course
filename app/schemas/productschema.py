@@ -1,4 +1,4 @@
-from pydantic import BaseModel, PositiveInt, Field, PositiveFloat
+from pydantic import BaseModel, Field, PositiveFloat, PositiveInt
 
 
 class ProductSchema(BaseModel):

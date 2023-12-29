@@ -9,6 +9,7 @@ __all__ = (
     "DataToken",
 )
 
-from .productschema import ProductSchema, Item
+from .productschema import Item, ProductSchema
 from .todoschema import ToDoSchema
-from .userschema import UserBaseSchema, UserSchema, CreateUserSchema, Token, DataToken
+from .userschema import (CreateUserSchema, DataToken, Token, UserBaseSchema,
+                         UserSchema)
