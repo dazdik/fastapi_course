@@ -1,21 +1,19 @@
-from dotenv import load_dotenv
 import os
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from datetime import datetime, timedelta
+
+import jwt
+from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jwt import PyJWTError
 from passlib.context import CryptContext
-
-
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import timedelta, datetime
-import jwt
 
-from app import CustomUsernameException, CustomPasswordException
+from app import CustomPasswordException, CustomUsernameException
 from app.db_config import get_db_session
 from app.models import User
-from app.schemas import CreateUserSchema, DataToken, Token
-
+from app.schemas import DataToken, Token
 
 load_dotenv()
 

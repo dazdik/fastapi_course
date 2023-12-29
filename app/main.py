@@ -3,24 +3,19 @@ from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
-
 from fastapi.exceptions import RequestValidationError
-
-from app.exceptions import (
-    global_exception_handler,
-    CustomException,
-    custom_exception_handler,
-    CustomUsernameException,
-    custom_exception_handler_username,
-    CustomPasswordException,
-    custom_exception_handler_password,
-    custom_request_validation_exception_handler,
-)
 from products.views import router as product_router
 from todos.views import router as todo_router
-from user.views import router as user_router
 from user.auth import router as auth_router
+from user.views import router as user_router
+
 from app.db_config import sessionmanager
+from app.exceptions import (CustomException, CustomPasswordException,
+                            CustomUsernameException, custom_exception_handler,
+                            custom_exception_handler_password,
+                            custom_exception_handler_username,
+                            custom_request_validation_exception_handler,
+                            global_exception_handler)
 
 
 @asynccontextmanager
