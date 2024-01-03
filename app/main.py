@@ -1,21 +1,28 @@
 import re
 from contextlib import asynccontextmanager
 
+
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
+from starlette.middleware.base import BaseHTTPMiddleware
+
 from products.views import router as product_router
 from todos.views import router as todo_router
 from user.auth import router as auth_router
 from user.views import router as user_router
 
 from app.db_config import sessionmanager
-from app.exceptions import (CustomException, CustomPasswordException,
-                            CustomUsernameException, custom_exception_handler,
-                            custom_exception_handler_password,
-                            custom_exception_handler_username,
-                            custom_request_validation_exception_handler,
-                            global_exception_handler)
+from app.exceptions import (
+    CustomException,
+    CustomPasswordException,
+    CustomUsernameException,
+    custom_exception_handler,
+    custom_exception_handler_password,
+    custom_exception_handler_username,
+    custom_request_validation_exception_handler,
+    global_exception_handler,
+)
 
 
 @asynccontextmanager
@@ -27,10 +34,24 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+class SimpleLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        print(f"Входящий запрос: {request.method} {request.url}")
+
+        response = await call_next(request)
+
+        print(f"Ответ: {response.status_code}")
+
+        return response
+
+
 app.include_router(product_router)
 app.include_router(todo_router)
 app.include_router(user_router)
 app.include_router(auth_router)
+app.add_middleware(SimpleLoggingMiddleware)
 
 
 app.add_exception_handler(CustomException, custom_exception_handler)
